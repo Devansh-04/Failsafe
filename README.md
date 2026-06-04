@@ -587,6 +587,10 @@ Some possible future improvements are:
 
 ---
 
+---
+## Note: The live demo currently showcases the frontend dashboard UI. Backend/API integration is under development.
+---
+
 ## 🧑‍💻 Author
 
 **Devansh Singh**
