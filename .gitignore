@@ -15,8 +15,6 @@ env/
 data/raw/
 data/processed/*.csv
 
-# Models
-models/*.pkl
 
 # Node / React
 frontend/node_modules/
