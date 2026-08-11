@@ -1,31 +1,93 @@
+import os
+import io
+from pathlib import Path
+
 import joblib
 import pandas as pd
 import shap
+
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import StreamingResponse
-from schemas import StudentInput
-from intervention import generate_intervention_plan
 from fastapi.middleware.cors import CORSMiddleware
-import io
 
+from .schemas import StudentInput
+from .intervention import generate_intervention_plan
+
+
+# ============================================================
+# APP CONFIGURATION
+# ============================================================
 
 app = FastAPI(
     title="FAILSAFE API",
     description="Student failure-risk prediction API using XGBoost and SHAP",
     version="1.0"
 )
+
+
+# ============================================================
+# CORS CONFIGURATION
+# ============================================================
+
+# During local development:
+#     http://localhost:5173
+#
+# On Render:
+#     Set FRONTEND_URL as an environment variable to your
+#     deployed frontend URL.
+
+FRONTEND_URL = os.getenv(
+    "FRONTEND_URL",
+    "http://localhost:5173"
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        FRONTEND_URL,
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-model = joblib.load("../models/failsafe_model.pkl")
-threshold = joblib.load("../models/failsafe_threshold.pkl")
+# ============================================================
+# MODEL LOADING
+# ============================================================
 
+# Get the root directory of the project.
+#
+# File structure:
+#
+# FailSafe/
+# ├── api/
+# │   └── main.py
+# ├── models/
+# │   ├── failsafe_model.pkl
+# │   └── failsafe_threshold.pkl
+#
+# Therefore:
+# main.py -> parent = api/
+# api/    -> parent = FailSafe/
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+MODEL_DIR = BASE_DIR / "models"
+
+MODEL_PATH = MODEL_DIR / "failsafe_model.pkl"
+THRESHOLD_PATH = MODEL_DIR / "failsafe_threshold.pkl"
+
+
+# Load trained model and threshold
+model = joblib.load(MODEL_PATH)
+threshold = joblib.load(THRESHOLD_PATH)
+
+
+# ============================================================
+# ROOT ENDPOINT
+# ============================================================
 
 @app.get("/")
 def home():
@@ -35,6 +97,10 @@ def home():
     }
 
 
+# ============================================================
+# HEALTH CHECK
+# ============================================================
+
 @app.get("/health")
 def health_check():
     return {
@@ -42,29 +108,65 @@ def health_check():
     }
 
 
+# ============================================================
+# SINGLE STUDENT PREDICTION
+# ============================================================
+
 @app.post("/predict")
 def predict_student_risk(student: StudentInput):
+
     student_dict = student.dict()
 
     input_df = pd.DataFrame([student_dict])
 
+    # --------------------------------------------------------
+    # Prediction
+    # --------------------------------------------------------
+
     risk_probability = model.predict_proba(input_df)[0][1]
+
     prediction = int(risk_probability >= threshold)
+
+    # --------------------------------------------------------
+    # Extract preprocessing + XGBoost model from pipeline
+    # --------------------------------------------------------
 
     preprocessor = model.named_steps["preprocessor"]
     xgb_model = model.named_steps["model"]
 
-    cat_cols = input_df.select_dtypes(include=["object"]).columns.tolist()
-    num_cols = input_df.select_dtypes(exclude=["object"]).columns.tolist()
-
-    cat_feature_names = preprocessor.named_transformers_["cat"].get_feature_names_out(cat_cols)
-    all_feature_names = list(cat_feature_names) + num_cols
+    # --------------------------------------------------------
+    # Transform input using the same preprocessing pipeline
+    # --------------------------------------------------------
 
     processed_input = preprocessor.transform(input_df)
-    processed_input = pd.DataFrame(processed_input, columns=all_feature_names)
+
+    # Get feature names directly from the fitted preprocessor.
+    # This is safer than manually reconstructing categorical
+    # and numerical feature names.
+    feature_names = preprocessor.get_feature_names_out()
+
+    # Convert transformed data into a dense array if required.
+    if hasattr(processed_input, "toarray"):
+        processed_input = processed_input.toarray()
+
+    processed_input = pd.DataFrame(
+        processed_input,
+        columns=feature_names
+    )
+
+    # --------------------------------------------------------
+    # SHAP explanation
+    # --------------------------------------------------------
 
     explainer = shap.TreeExplainer(xgb_model)
+
     shap_values = explainer.shap_values(processed_input)
+
+    # SHAP can sometimes return a list depending on the model
+    # configuration. For binary classification, use the
+    # positive-class explanation when necessary.
+    if isinstance(shap_values, list):
+        shap_values = shap_values[1]
 
     reason_df = pd.DataFrame({
         "feature": processed_input.columns,
@@ -72,40 +174,93 @@ def predict_student_risk(student: StudentInput):
         "feature_value": processed_input.iloc[0].values
     })
 
-    risk_reasons = reason_df[reason_df["shap_value"] > 0].copy()
+    # Only consider features contributing toward increased
+    # failure risk.
+    risk_reasons = reason_df[
+        reason_df["shap_value"] > 0
+    ].copy()
+
     risk_reasons["abs_shap"] = risk_reasons["shap_value"].abs()
 
-    top_reasons = risk_reasons.sort_values("abs_shap", ascending=False)["feature"].head(5).tolist()
+    top_reasons = (
+        risk_reasons
+        .sort_values("abs_shap", ascending=False)
+        ["feature"]
+        .head(5)
+        .tolist()
+    )
 
-    interventions = generate_intervention_plan(student_dict, top_reasons)
+    # Fallback if SHAP does not find positive contributors
+    if len(top_reasons) == 0:
+        top_reasons = ["General academic monitoring"]
+
+    # --------------------------------------------------------
+    # Intervention recommendations
+    # --------------------------------------------------------
+
+    interventions = generate_intervention_plan(
+        student_dict,
+        top_reasons
+    )
+
+    # --------------------------------------------------------
+    # Response
+    # --------------------------------------------------------
 
     return {
         "risk_probability": round(float(risk_probability), 3),
         "threshold": float(threshold),
-        "prediction": "At Risk" if prediction == 1 else "Not At Risk",
+        "prediction": (
+            "At Risk"
+            if prediction == 1
+            else "Not At Risk"
+        ),
         "top_reasons": top_reasons,
         "intervention_plan": interventions
     }
 
+
+# ============================================================
+# CSV PREDICTION
+# ============================================================
+
 @app.post("/predict-csv")
 def predict_csv(file: UploadFile = File(...)):
+
     df = pd.read_csv(file.file)
 
+    # --------------------------------------------------------
+    # Predictions
+    # --------------------------------------------------------
+
     probabilities = model.predict_proba(df)[:, 1]
-    predictions = (probabilities >= threshold).astype(int)
+
+    predictions = (
+        probabilities >= threshold
+    ).astype(int)
 
     results = df.copy()
+
     results["risk_probability"] = probabilities
+
     results["predicted_fail_risk"] = predictions
-    results["risk_label"] = results["predicted_fail_risk"].map({
+
+    results["risk_label"] = results[
+        "predicted_fail_risk"
+    ].map({
         0: "Not At Risk",
         1: "At Risk"
     })
 
+    # --------------------------------------------------------
+    # Generate reasons + interventions
+    # --------------------------------------------------------
+
     top_reasons_list = []
     intervention_list = []
 
-    for index, row in df.iterrows():
+    for _, row in df.iterrows():
+
         student_dict = row.to_dict()
 
         top_reasons = []
@@ -120,48 +275,101 @@ def predict_csv(file: UploadFile = File(...)):
             top_reasons.append("Low study time")
 
         if student_dict.get("goout", 0) >= 4:
-            top_reasons.append("High social/outgoing time")
+            top_reasons.append(
+                "High social/outgoing time"
+            )
 
         if student_dict.get("health", 5) <= 2:
-            top_reasons.append("Low health score")
+            top_reasons.append(
+                "Low health score"
+            )
 
         if len(top_reasons) == 0:
-            top_reasons.append("General academic monitoring")
+            top_reasons.append(
+                "General academic monitoring"
+            )
 
-        interventions = generate_intervention_plan(student_dict, top_reasons)
+        interventions = generate_intervention_plan(
+            student_dict,
+            top_reasons
+        )
 
-        top_reasons_list.append(", ".join(top_reasons))
-        intervention_list.append(" | ".join(interventions))
+        top_reasons_list.append(
+            ", ".join(top_reasons)
+        )
+
+        intervention_list.append(
+            " | ".join(interventions)
+        )
 
     results["top_reasons"] = top_reasons_list
+
     results["intervention_plan"] = intervention_list
+
+    # --------------------------------------------------------
+    # Response
+    # --------------------------------------------------------
 
     return {
         "total_students": len(results),
-        "at_risk_students": int(results["predicted_fail_risk"].sum()),
-        "not_at_risk_students": int((results["predicted_fail_risk"] == 0).sum()),
-        "students": results.to_dict(orient="records")
+
+        "at_risk_students": int(
+            results["predicted_fail_risk"].sum()
+        ),
+
+        "not_at_risk_students": int(
+            (results["predicted_fail_risk"] == 0).sum()
+        ),
+
+        "students": results.to_dict(
+            orient="records"
+        )
     }
 
+
+# ============================================================
+# CSV PREDICTION + DOWNLOAD
+# ============================================================
+
 @app.post("/predict-csv-download")
-def predict_csv_download(file: UploadFile = File(...)):
+def predict_csv_download(
+    file: UploadFile = File(...)
+):
+
     df = pd.read_csv(file.file)
 
+    # --------------------------------------------------------
+    # Predictions
+    # --------------------------------------------------------
+
     probabilities = model.predict_proba(df)[:, 1]
-    predictions = (probabilities >= threshold).astype(int)
+
+    predictions = (
+        probabilities >= threshold
+    ).astype(int)
 
     results = df.copy()
+
     results["risk_probability"] = probabilities
+
     results["predicted_fail_risk"] = predictions
-    results["risk_label"] = results["predicted_fail_risk"].map({
+
+    results["risk_label"] = results[
+        "predicted_fail_risk"
+    ].map({
         0: "Not At Risk",
         1: "At Risk"
     })
 
+    # --------------------------------------------------------
+    # Generate reasons + interventions
+    # --------------------------------------------------------
+
     top_reasons_list = []
     intervention_list = []
 
-    for index, row in df.iterrows():
+    for _, row in df.iterrows():
+
         student_dict = row.to_dict()
 
         top_reasons = []
@@ -176,24 +384,48 @@ def predict_csv_download(file: UploadFile = File(...)):
             top_reasons.append("Low study time")
 
         if student_dict.get("goout", 0) >= 4:
-            top_reasons.append("High social/outgoing time")
+            top_reasons.append(
+                "High social/outgoing time"
+            )
 
         if student_dict.get("health", 5) <= 2:
-            top_reasons.append("Low health score")
+            top_reasons.append(
+                "Low health score"
+            )
 
         if len(top_reasons) == 0:
-            top_reasons.append("General academic monitoring")
+            top_reasons.append(
+                "General academic monitoring"
+            )
 
-        interventions = generate_intervention_plan(student_dict, top_reasons)
+        interventions = generate_intervention_plan(
+            student_dict,
+            top_reasons
+        )
 
-        top_reasons_list.append(", ".join(top_reasons))
-        intervention_list.append(" | ".join(interventions))
+        top_reasons_list.append(
+            ", ".join(top_reasons)
+        )
+
+        intervention_list.append(
+            " | ".join(interventions)
+        )
 
     results["top_reasons"] = top_reasons_list
+
     results["intervention_plan"] = intervention_list
 
+    # --------------------------------------------------------
+    # Convert dataframe to CSV
+    # --------------------------------------------------------
+
     stream = io.StringIO()
-    results.to_csv(stream, index=False)
+
+    results.to_csv(
+        stream,
+        index=False
+    )
+
     stream.seek(0)
 
     response = StreamingResponse(
@@ -201,6 +433,11 @@ def predict_csv_download(file: UploadFile = File(...)):
         media_type="text/csv"
     )
 
-    response.headers["Content-Disposition"] = "attachment; filename=failsafe_predictions.csv"
+    response.headers[
+        "Content-Disposition"
+    ] = (
+        "attachment; "
+        "filename=failsafe_predictions.csv"
+    )
 
     return response
