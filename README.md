@@ -597,9 +597,6 @@ Indian Institute of Technology Guwahati
 
 ---
 
-
----
-
 ## ⭐ Conclusion
 
 FailSafe is an end-to-end machine learning based academic risk prediction system that combines data science, backend development, frontend development, authentication, and database management.
