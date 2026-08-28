@@ -11,7 +11,7 @@ It combines **Machine Learning**, **FastAPI**, **React**, **PostgreSQL**, and **
 
 ---
 
-## 🚀 Project Overview
+##  Project Overview
 
 Many students struggle academically due to low attendance, poor study consistency, lack of sleep, incomplete assignments, or weak previous performance.
 
@@ -27,24 +27,24 @@ This project is designed as a practical academic analytics system that can be us
 
 ---
 
-## ✨ Features
+##  Features
 
-* 🔐 User registration and login
-* 🛡️ JWT-based authentication
-* 🧠 Machine learning based student risk prediction
-* 📊 Risk probability calculation
-* 🚦 High Risk / Low Risk classification
-* 💡 Personalized intervention recommendation
-* 🗄️ PostgreSQL database integration
-* 🕒 Prediction history for each user
-* ⚡ FastAPI backend
-* 🎨 React frontend
-* 📁 Clean project structure
-* 🔗 Full stack ML deployment-ready architecture
+*  User registration and login
+*  JWT-based authentication
+*  Machine learning based student risk prediction
+*  Risk probability calculation
+*  High Risk / Low Risk classification
+*  Personalized intervention recommendation
+*  PostgreSQL database integration
+*  Prediction history for each user
+*  FastAPI backend
+*  React frontend
+*  Clean project structure
+*  Full stack ML deployment-ready architecture
 
 ---
 
-## 🧠 Machine Learning Model
+##  Machine Learning Model
 
 The ML model predicts student academic risk using factors such as:
 
@@ -72,7 +72,7 @@ Example output:
 
 ---
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 ### Frontend
 
@@ -110,7 +110,7 @@ Example output:
 
 ---
 
-## 📂 Project Structure
+##  Project Structure
 
 ```txt
 FAILSAFE/
@@ -263,7 +263,7 @@ http://localhost:5173
 
 ---
 
-## 🔐 Authentication Flow
+##  Authentication Flow
 
 FailSafe uses JWT authentication.
 
@@ -276,7 +276,7 @@ After successful login, a JWT token is generated and stored in local storage. Th
 
 ---
 
-## 🔗 API Endpoints
+##  API Endpoints
 
 ### Home Route
 
@@ -383,7 +383,7 @@ Returns all previous predictions made by the logged-in user.
 
 ---
 
-## 🖥️ Frontend Pages
+##  Frontend Pages
 
 The React frontend contains:
 
@@ -397,7 +397,7 @@ The React frontend contains:
 
 ---
 
-## 📊 Sample Input
+##  Sample Input
 
 ```txt
 Study Hours: 4
@@ -409,7 +409,7 @@ Assignment Completion: 70
 
 ---
 
-## 📌 Sample Output
+##  Sample Output
 
 ```txt
 Risk Probability: 78.00%
@@ -420,7 +420,7 @@ Moderate intervention needed: improve study consistency, assignment completion, 
 
 ---
 
-## 🧩 How FailSafe Works
+##  How FailSafe Works
 
 ```txt
 User registers/logs in
@@ -446,7 +446,7 @@ Result is shown on frontend
 
 ---
 
-## 🗄️ Database Tables
+##  Database Tables
 
 The project uses PostgreSQL with two main tables.
 
@@ -480,7 +480,7 @@ created_at
 
 ---
 
-## 🧪 Testing the API
+##  Testing the API
 
 You can test the backend using FastAPI Swagger UI:
 
@@ -506,7 +506,7 @@ Bearer your_token_here
 
 ---
 
-## 📦 Important Files
+##  Important Files
 
 ### `api/main.py`
 
@@ -557,7 +557,7 @@ Main React frontend file.
 
 ---
 
-## 🌟 Key Highlights
+##  Key Highlights
 
 * End-to-end ML project
 * Full stack architecture
@@ -571,7 +571,7 @@ Main React frontend file.
 
 ---
 
-## 🚀 Future Improvements
+##  Future Improvements
 
 Some possible future improvements are:
 
@@ -587,13 +587,17 @@ Some possible future improvements are:
 
 ---
 
+##  License
+
+Released under the [MIT License](LICENSE).
+
+---
 
 ## 🧑‍💻 Author
 
 **Devansh Singh**
 
-B.Tech Biotechnology at
-Indian Institute of Technology Guwahati
+[![GitHub](https://img.shields.io/badge/GitHub-Devansh--04-181717?logo=github&logoColor=white)](https://github.com/Devansh-04)
 
 ---
 
