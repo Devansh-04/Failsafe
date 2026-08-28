@@ -593,7 +593,7 @@ Released under the [MIT License](LICENSE).
 
 ---
 
-## 🧑‍💻 Author
+##  Author
 
 **Devansh Singh**
 
@@ -601,7 +601,7 @@ Released under the [MIT License](LICENSE).
 
 ---
 
-## ⭐ Conclusion
+##  Conclusion
 
 FailSafe is an end-to-end machine learning based academic risk prediction system that combines data science, backend development, frontend development, authentication, and database management.
 
